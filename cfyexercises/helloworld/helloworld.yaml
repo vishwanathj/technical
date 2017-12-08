@@ -1,0 +1,37 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - http://www.getcloudify.org/spec/cloudify/4.2/types.yaml
+  - http://www.getcloudify.org/spec/fabric-plugin/1.5.1/plugin.yaml
+
+inputs:
+
+  vm_ip:
+    type: string
+
+  ssh_user:
+    type: string
+
+  ssh_port:
+    default: 22
+
+  ssh_password:
+    type: string
+
+node_templates:
+  vm:
+    type: cloudify.nodes.Compute
+    properties:
+      ip: { get_input: vm_ip}
+      agent_config:
+        install_method: none
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: fabric.fabric_plugin.tasks.run_script
+          inputs:
+            script_path: scripts/helloworld.sh
+            fabric_env:
+              host_string: { get_input: vm_ip }
+              user: { get_input: ssh_user }
+              password: { get_input: ssh_password }
