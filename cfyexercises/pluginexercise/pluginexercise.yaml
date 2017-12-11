@@ -1,0 +1,89 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - http://www.getcloudify.org/spec/cloudify/4.2/types.yaml
+
+inputs:
+
+  vm_ip:
+    type: string
+
+  ssh_user:
+    type: string
+
+  ssh_port:
+    default: 22
+
+  ssh_password:
+    type: string
+
+plugins:
+  rtcustomplug:
+    executor: host_agent
+    #package_name: runtime-prop-set-plugin
+    source: rtpropsetplugin
+
+node_types:
+  nodes.NodeJSServer:
+    derived_from: cloudify.nodes.WebServer
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        create: scripts/install-nodejs.sh
+        delete: scripts/uninstall-nodejs.sh
+        start: scripts/start-nodejs-app.sh
+        stop: scripts/stop-nodejs-app.sh
+      #custom_interface:
+        #configure:
+          #implementation: rtcustomplug.rtpropsetplugin.tasks.my_task
+          #inputs:
+            #hello: 'world'
+
+
+  nodes.NodeTomcatServer:
+    derived_from: cloudify.nodes.ApplicationServer
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        create: scripts/install-tomcat.sh
+        configure: scripts/configure-tomcat.sh
+        delete: scripts/uninstall-tomcat.sh
+        start: scripts/start-tomcat.sh
+        stop: scripts/stop-tomcat.sh
+
+node_templates:
+  web:
+    type: cloudify.nodes.Compute
+    properties:
+      ip: { get_input: vm_ip}
+      cloudify_agent:
+        user: { get_input: ssh_user }
+        password: { get_input: ssh_password }
+
+  nodejs:
+    type: nodes.NodeJSServer
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: web
+
+  tomcat:
+    type: nodes.NodeTomcatServer
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: web
+
+  custom_plugin_node:
+    type: cloudify.nodes.Root
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: web
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        start:
+          implementation: rtcustomplug.rtpropsetplugin.tasks.my_task
+          inputs:
+            hello: 'world'
+
+outputs:
+  rtproperty:
+    description: runtime property set
+    value: { get_attribute: [custom_plugin_node, hello] }
+  
