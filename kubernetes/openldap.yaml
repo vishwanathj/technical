@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    labels:
+      app: openldap
+    name: openldap
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        deployment: openldap
+    strategy: {}
+    template:
+      metadata:
+        labels:
+          deployment: openldap
+      spec:
+        containers:
+        - image: osixia/openldap:stable
+          name: openldap
+          ports:
+          - containerPort: 389
+            protocol: TCP
+          - containerPort: 636
+            protocol: TCP
+          resources: {}
+        - image: osixia/phpldapadmin:stable
+          name: phpldapadmin
+          ports:
+            - containerPort: 80
+              name: ldapadminweb
+          env:
+            - name: PHPLDAPADMIN_HTTPS
+              value: "false"
+            - name: PHPLDAPADMIN_LDAP_HOSTS
+              value: "localhost"
+  status: {}
+---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: openldap
+    name: openldap
+  spec:
+    type: NodePort
+    ports:
+    - name: 389-tcp
+      port: 389
+      nodePort: 30389
+      protocol: TCP
+      targetPort: 389
+    - name: 636-tcp
+      port: 636
+      nodePort: 30636
+      protocol: TCP
+      targetPort: 636
+    - name: 80-tcp
+      port: 80
+      nodePort: 30080
+      protocol: TCP
+      targetPort: ldapadminweb
+    selector:
+      deployment: openldap
+  status:
+    loadBalancer: {}
