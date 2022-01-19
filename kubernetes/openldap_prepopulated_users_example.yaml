@@ -1,0 +1,181 @@
+apiVersion: v1
+data:
+  LDAPUSERS: |
+    dn: ou=groups,dc=example,dc=org
+    objectClass: organizationalUnit
+    objectClass: top
+    ou: groups    
+
+    dn: ou=people,dc=example,dc=org
+    changetype: add
+    objectClass: organizationalUnit
+    objectClass: top
+    ou: people    
+
+    dn: uid=appuser,ou=people,dc=example,dc=org
+    changetype: add
+    objectClass: person
+    objectClass: uidObject
+    cn: appuser
+    sn: appuser
+    uid: appuser
+    userPassword: $2a$10$nyG5R781Vbowtj73XohFNOY6RHoMz6fInUMwtHO0lkib.mh0yo4T6    
+    dn: uid=appoperator,ou=people,dc=example,dc=org
+    changetype: add
+    objectClass: person
+    objectClass: uidObject
+    cn: appoperator
+    sn: appoperator
+    uid: appoperator
+    userPassword: $2a$10$nyG5R781Vbowtj73XohFNOY6RHoMz6fInUMwtHO0lkib.mh0yo4T6    
+    dn: uid=appoeditor,ou=people,dc=example,dc=org
+    changetype: add
+    objectClass: person
+    objectClass: uidObject
+    cn: appoeditor
+    sn: appoeditor
+    uid: appoeditor
+    userPassword: $2a$10$nyG5R781Vbowtj73XohFNOY6RHoMz6fInUMwtHO0lkib.mh0yo4T6    
+    dn: uid=appadmin,ou=people,dc=example,dc=org
+    changetype: add
+    objectClass: person
+    objectClass: uidObject
+    cn: appadmin
+    sn: appadmin
+    uid: appadmin
+    userPassword: $2a$10$nyG5R781Vbowtj73XohFNOY6RHoMz6fInUMwtHO0lkib.mh0yo4T6    
+    dn: uid=secadmin,ou=people,dc=example,dc=org
+    changetype: add
+    objectClass: person
+    objectClass: uidObject
+    cn: secadmin
+    sn: secadmin
+    uid: secadmin
+    userPassword: $2a$10$nyG5R781Vbowtj73XohFNOY6RHoMz6fInUMwtHO0lkib.mh0yo4T6    
+    dn: uid=readonly,ou=people,dc=example,dc=org
+    changetype: add
+    objectClass: person
+    objectClass: uidObject
+    cn: readonly
+    sn: readonly
+    uid: readonly
+    userPassword: $2a$10$nyG5R781Vbowtj73XohFNOY6RHoMz6fInUMwtHO0lkib.mh0yo4T6    
+    dn: cn=SLMAdmin,ou=groups,dc=example,dc=org
+    objectclass: groupOfNames
+    cn: SLMAdmin
+    member: uid=appadmin,ou=people,dc=example,dc=org    
+
+    dn: cn=Portal,ou=groups,dc=example,dc=org
+    objectclass: groupOfNames
+    cn: Portal
+    member: uid=appuser,ou=people,dc=example,dc=org
+    member: uid= appoperator,ou=people,dc=example,dc=org
+    member: uid= appoeditor,ou=people,dc=example,dc=org    
+
+    dn: cn=RootSecAdmin,ou=groups,dc=example,dc=org
+    objectclass: groupOfNames
+    cn: RootSecAdmin
+    member: uid=secadmin,ou=people,dc=example,dc=org    
+    
+    dn: cn=ReadOnly,ou=groups,dc=example,dc=org
+    objectclass: groupOfNames
+    cn: ReadOnly
+    member: uid=readonly,ou=people,dc=example,dc=org
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: ldapusers
+---
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    labels:
+      app: openldap
+    name: openldap
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        deployment: openldap
+    strategy: {}
+    template:
+      metadata:
+        labels:
+          deployment: openldap
+      spec:
+        volumes:
+        - name: config-volume
+          configMap:
+            name: ldapusers
+            items:
+            - key: LDAPUSERS
+              path: bootstrap.ldif
+        imagePullSecrets:
+        - name: docker
+        containers:
+        - image: osixia/openldap:stable
+          name: openldap
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    sleep 60s
+                    ldapadd -x -w $LDAP_ADMIN_PASSWORD -D "cn=admin,dc=example,dc=org" -f /opt/bootstrap.ldif
+          env:
+            - name: LDAP_ORGANIZATION
+              value: "app"
+            - name: LDAP_DOMAIN
+              value: "app.com"
+            - name: LDAP_ADMIN_PASSWORD
+              value: "adminpassword"
+          volumeMounts:
+          - name: config-volume
+            mountPath: /opt
+          ports:
+          - containerPort: 389
+            protocol: TCP
+          - containerPort: 636
+            protocol: TCP
+        - image: osixia/phpldapadmin:stable
+          name: phpldapadmin
+          ports:
+          - containerPort: 80
+            name: ldapadminweb
+          env:
+           - name: PHPLDAPADMIN_HTTPS
+             value: "false"
+           - name: PHPLDAPADMIN_LDAP_HOSTS
+             value: "localhost"
+  status: {}
+---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: openldap
+    name: openldap
+  spec:
+    type: NodePort
+    ports:
+    - name: 389-tcp
+      port: 389
+      nodePort: 30389
+      protocol: TCP
+      targetPort: 389
+    - name: 636-tcp
+      port: 636
+      nodePort: 31636
+      protocol: TCP
+      targetPort: 636
+    - name: 80-tcp
+      port: 80
+      nodePort: 30080
+      protocol: TCP
+      targetPort: ldapadminweb
+    selector:
+      deployment: openldap
+  status:
+    loadBalancer: {}
